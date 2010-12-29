@@ -1,0 +1,5 @@
+An attempt at method signatures in XS.
+
+- can parse a sub using method keyword
+- need to install sub
+- stole lots of code from Zefram RPN XS API example.
