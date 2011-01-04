@@ -8,21 +8,6 @@
 	(!sv_is_glob(sv) && !sv_is_regexp(sv) && \
 	 (SvFLAGS(sv) & (SVf_IOK|SVf_NOK|SVf_POK|SVp_IOK|SVp_NOK|SVp_POK)))
 
-#define mkLISTOP(t, f, s, l) THX_mkLISTOP(aTHX_ (t), (f), (s), (l))
-static OP *
-THX_mkLISTOP(pTHX_ U32 type, OP *first, OP *sib, OP *last)
-{
-    LISTOP *listop;
-    NewOp(1103, listop, 1, LISTOP);
-    listop->op_type     = (OPCODE)type;
-    listop->op_flags    = OPf_KIDS;
-    listop->op_first    = first;
-    first->op_sibling   = sib;
-    sib->op_sibling     = last;
-    listop->op_last     = last;
-    return (OP *)listop;
-}
-
 static SV *hintkey_method_sv;
 static int (*next_keyword_plugin)(pTHX_ char *, STRLEN, OP **);
 
@@ -30,6 +15,54 @@ static int (*next_keyword_plugin)(pTHX_ char *, STRLEN, OP **);
 
 #define PL_bufptr (PL_parser->bufptr)
 #define PL_bufend (PL_parser->bufend)
+
+/* 
+ * install method (stolen from Mouse - xs-src/MouseUtil.xs 
+ */
+
+void
+mouse_install_sub(pTHX_ GV* const gv, SV* const code_ref) {
+    CV* cv;
+
+    assert(gv != NULL);
+    assert(code_ref != NULL);
+    assert(isGV(gv));
+    assert(IsCodeRef(code_ref));
+
+    if(GvCVu(gv)){ /* delete *slot{gv} to work around "redefine" warning */
+        SvREFCNT_dec(GvCV(gv));
+        GvCV(gv) = NULL;
+    }
+
+    sv_setsv_mg((SV*)gv, code_ref); /* *gv = $code_ref */
+
+    /* name the CODE ref if it's anonymous */
+    cv = (CV*)SvRV(code_ref);
+    if(CvANON(cv)
+        && CvGV(cv) /* a cv under construction has no gv */ ){
+        HV* dbsub;
+
+        /* update %DB::sub to make NYTProf happy */
+        if((PL_perldb & (PERLDBf_SUBLINE|PERLDB_NAMEANON))
+            && PL_DBsub && (dbsub = GvHV(PL_DBsub))
+        ){
+            /* see Perl_newATTRSUB() in op.c */
+            SV* const subname = sv_newmortal();
+            HE* orig;
+
+            gv_efullname3(subname, CvGV(cv), NULL);
+            orig = hv_fetch_ent(dbsub, subname, FALSE, 0U);
+            if(orig){
+                gv_efullname3(subname, gv, NULL);
+                (void)hv_store_ent(dbsub, subname, HeVAL(orig), 0U);
+                SvREFCNT_inc_simple_void_NN(HeVAL(orig));
+            }
+        }
+
+        CvGV_set(cv, gv);
+        CvANON_off(cv);
+    }
+}
 
 /*  parse var 
 #define parse_var() THX_parse_var(aTHX)
@@ -87,11 +120,13 @@ static OP *THX_parse_method_name(pTHX)
     return newSVOP(OP_CONST, 0, newSVpvn(start, s-start));
 }
 
+
 #define parse_keyword_method() THX_parse_keyword_method(aTHX)
 static OP *THX_parse_keyword_method(pTHX)
 {
     OP *stmts, *block, *name, *final;
-	SV *sub;
+	GV *stash; 
+	SV *code;
 
  	I32 scope;// = PL_scopestack;
 
@@ -99,19 +134,19 @@ static OP *THX_parse_keyword_method(pTHX)
 
 	start_subparse(FALSE, 0);
 	SAVEFREESV(PL_compcv);
-	SvREFCNT_inc_simple_void(PL_compcv);	
+	SvREFCNT_inc_simple_void(PL_compcv);
+
 	scope = Perl_block_start(TRUE);
 	start_subparse(FALSE, 0);	
+
     stmts = parse_block(0);
 	block = Perl_block_end(scope, stmts);
-	PL_parser->expect = XSTATE;
 
-	sub = (SV *)newATTRSUB(scope, name, NULL, NULL, block);
+	code = (SV *)newATTRSUB(scope, name, NULL, NULL, block);
+	
+	mouse_install_sub(aTHX_ PL_curstash, newRV_inc(code));
 
-	return newUNOP( OP_REFGEN,
-		newSVOP(OP_ANONCODE, 0, sub), name);
-
-//	return newOP(OP_NULL, 0);
+	return newOP(OP_NULL, 0);
 }
 
 
