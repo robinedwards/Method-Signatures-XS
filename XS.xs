@@ -34,6 +34,7 @@ mouse_install_sub(pTHX_ GV* const gv, SV* const code_ref) {
         GvCV(gv) = NULL;
     }
 
+
     sv_setsv_mg((SV*)gv, code_ref); /* *gv = $code_ref */
 
     /* name the CODE ref if it's anonymous */
@@ -96,7 +97,7 @@ static OP *THX_parse_var(pTHX)
 
 /* Parse method name */
 #define parse_method_name() THX_parse_method_name(aTHX)
-static OP *THX_parse_method_name(pTHX)
+SV *THX_parse_method_name(pTHX)
 {
 	char *s = PL_bufptr;
 	char *start = s;
@@ -117,20 +118,20 @@ static OP *THX_parse_method_name(pTHX)
 	if(s-start < 2) croak("no method name");
     lex_read_to(s);
 
-    return newSVOP(OP_CONST, 0, newSVpvn(start, s-start));
+    return newSVpvn(start, s-start);
 }
 
 
 #define parse_keyword_method() THX_parse_keyword_method(aTHX)
 static OP *THX_parse_keyword_method(pTHX)
 {
-    OP *stmts, *block, *name, *final;
-	GV *stash; 
-	SV *code;
+    OP *stmts, *block, *final;
+	SV *code, *method_name, *package_name;
+	HV *stash;
+	GV *slot;
+ 	I32 scope;
 
- 	I32 scope;// = PL_scopestack;
-
-    name = parse_method_name();
+    method_name = parse_method_name();
 
 	start_subparse(FALSE, 0);
 	SAVEFREESV(PL_compcv);
@@ -142,9 +143,18 @@ static OP *THX_parse_keyword_method(pTHX)
     stmts = parse_block(0);
 	block = Perl_block_end(scope, stmts);
 
-	code = (SV *)newATTRSUB(scope, name, NULL, NULL, block);
+	code = (SV *)newATTRSUB(scope, 
+		newSVOP(OP_CONST, 0, method_name), NULL, NULL, block);
 	
-	mouse_install_sub(aTHX_ PL_curstash, newRV_inc(code));
+	stash = PL_curstash;
+	package_name = newSVpvn_share(HvNAME_get(stash), HvNAMELEN_get(stash), 0U);
+	
+	slot = gv_fetchpv(
+		form("%"SVf"::%"SVf, package_name, method_name), 
+		GV_ADDMULTI, SVt_PVCV
+	);
+	
+	mouse_install_sub(aTHX_ slot, newRV_inc(code));
 
 	return newOP(OP_NULL, 0);
 }

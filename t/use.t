@@ -1,12 +1,21 @@
-use Test::More qw/no_plan/;
+use Test::More plan => 4;
+require_ok "Method::Signatures::XS";
+
+package foo;
+use 5.012;
+use Test::More;
 use Method::Signatures::XS;
 
 method name { 
-    warn 'la la la la';
+    ok 1, "method called";
 }
 
-ok 1, 'parsed name method ok'; 
+1;
 
-name();
 
-ok 1, 'called name method as sub';
+ok 1, 'package defined';
+
+foo->name();
+
+ok 1, 'method call complete';
+
