@@ -98,11 +98,12 @@ static OP *THX_parse_var(pTHX)
 #define parse_method_name() THX_parse_method_name(aTHX)
 SV *THX_parse_method_name(pTHX)
 {
+
+    lex_read_space(0);
 	char *s = PL_bufptr;
 	char *start = s;
     SV *name;
 
-    lex_read_space(0);
     
 	while(1) {
         char c = *++s;        
@@ -114,17 +115,18 @@ SV *THX_parse_method_name(pTHX)
         }
     }
 
-	if(s-start < 2) croak("no method name");
+	if(s-start < 2) 
+		croak("no method name");
     lex_read_to(s);
-
-    return newSVpvn(start, s-start);
+	
+	return sv_2mortal(newSVpvn(start, s-start));
 }
 
 GV *get_slot(SV *method_name, HV *stash)
 {
 	SV *package_name = newSVpvn_share(HvNAME_get(stash), HvNAMELEN_get(stash), 0U);
 	GV *slot;
-	
+
 	slot = gv_fetchpv(
 		form("%"SVf"::%"SVf, package_name, method_name), 
 		GV_ADDMULTI, SVt_PVCV
@@ -157,10 +159,11 @@ static OP *THX_parse_keyword_method(pTHX)
     stmts = parse_block(0);
 	block = Perl_block_end(scope, stmts);
 
+	slot = get_slot(method_name, PL_curstash);
+	
 	code = (SV *)newATTRSUB(scope, 
 		newSVOP(OP_CONST, 0, method_name), NULL, NULL, block);
-	
-	slot = get_slot(method_name, PL_curstash);
+
 
 	install_sub(aTHX_ slot, newRV_inc(code));
 
