@@ -17,11 +17,10 @@ static int (*next_keyword_plugin)(pTHX_ char *, STRLEN, OP **);
 #define PL_bufend (PL_parser->bufend)
 
 /* 
- * install method (stolen from Mouse - xs-src/MouseUtil.xs 
+ * install stub (stolen from Mouse - xs-src/MouseUtil.xs 
  */
 
-void
-mouse_install_sub(pTHX_ GV* const gv, SV* const code_ref) {
+void install_sub(pTHX_ GV* const gv, SV* const code_ref) {
     CV* cv;
 
     assert(gv != NULL);
@@ -121,6 +120,21 @@ SV *THX_parse_method_name(pTHX)
     return newSVpvn(start, s-start);
 }
 
+GV *get_slot(SV *method_name, HV *stash)
+{
+	SV *package_name = newSVpvn_share(HvNAME_get(stash), HvNAMELEN_get(stash), 0U);
+	GV *slot;
+	
+	slot = gv_fetchpv(
+		form("%"SVf"::%"SVf, package_name, method_name), 
+		GV_ADDMULTI, SVt_PVCV
+	);
+	
+	if(!slot)
+		croak("couldn't get slot");
+
+	return slot;
+}
 
 #define parse_keyword_method() THX_parse_keyword_method(aTHX)
 static OP *THX_parse_keyword_method(pTHX)
@@ -146,15 +160,9 @@ static OP *THX_parse_keyword_method(pTHX)
 	code = (SV *)newATTRSUB(scope, 
 		newSVOP(OP_CONST, 0, method_name), NULL, NULL, block);
 	
-	stash = PL_curstash;
-	package_name = newSVpvn_share(HvNAME_get(stash), HvNAMELEN_get(stash), 0U);
-	
-	slot = gv_fetchpv(
-		form("%"SVf"::%"SVf, package_name, method_name), 
-		GV_ADDMULTI, SVt_PVCV
-	);
-	
-	mouse_install_sub(aTHX_ slot, newRV_inc(code));
+	slot = get_slot(method_name, PL_curstash);
+
+	install_sub(aTHX_ slot, newRV_inc(code));
 
 	return newOP(OP_NULL, 0);
 }
