@@ -115,8 +115,6 @@ SV *THX_parse_method_name(pTHX)
         }
     }
 
-	printf("read: %d \n",s-start);
-
 	if(s-start < 2) 
 		croak("no method name");
     lex_read_to(s);
