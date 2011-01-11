@@ -19,6 +19,15 @@ package Foo {
     method new {
         return bless {}, __PACKAGE__ ;
     }
+
+    ok 1, "parsing sig";
+
+    method with_args ($a, $b) {
+        return $a * $b;
+    }
+
+
+    ok 1, "finished parsing sig";
 }
 
 

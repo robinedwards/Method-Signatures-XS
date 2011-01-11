@@ -138,11 +138,45 @@ GV *get_slot(SV *method_name, HV *stash)
 	return slot;
 }
 
+SV *parse_signature(pTHX)
+{
+	SV *to_inject;
+	char *start, *end;
+	lex_read_space(0);
+
+	start = PL_bufptr;
+
+	if (*start == '(') {	
+		/* read till end of signature */
+
+		end = start;
+		while(1) {
+			char c = *++end;        
+			if (c == ')') {
+				break;	
+			}	
+		}
+
+		start++; /* skip opening brace */
+		
+		SV *to_inject = newSVpv("{ my ($self, ", 0);
+		sv_catsv(to_inject, newSVpvn(start, end-start));
+		sv_catpv(to_inject, " = @_;");
+
+		/* chop out sig */
+		lex_unstuff(end);
+
+		return to_inject;
+	} else {
+		return newSVpv("{ my ($self) = @_;", 0);
+	}
+}
+
 #define parse_keyword_method() THX_parse_keyword_method(aTHX)
 static OP *THX_parse_keyword_method(pTHX)
 {
     OP *stmts, *block, *final;
-	SV *code, *method_name, *package_name;
+	SV *code, *method_name, *package_name, *inject;
 	HV *stash;
 	GV *slot;
  	I32 scope;
@@ -155,6 +189,13 @@ static OP *THX_parse_keyword_method(pTHX)
 
 	scope = Perl_block_start(TRUE);
 	start_subparse(FALSE, 0);	
+
+	/* inject stack/sig stuff */
+	inject = parse_signature();
+	lex_read_space(0);
+	char *pos = PL_bufptr;
+	lex_unstuff(++pos); /* discard '{' */
+	lex_stuff_sv(inject, 0U);
 
     stmts = parse_block(0);
 	block = Perl_block_end(scope, stmts);
