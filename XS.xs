@@ -160,7 +160,7 @@ SV *parse_signature(pTHX)
 		
 		SV *to_inject = newSVpv("{my ($self, ", 0U);
 		sv_catsv(to_inject, newSVpvn(start, end-start));
-		sv_catpv(to_inject, ") = @_; die 'died parsed sig';\n");
+		sv_catpv(to_inject, ") = @_; die \"died parsed sig $aa\";\n");
 		
 
 		/* chop out sig */
