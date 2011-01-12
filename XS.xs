@@ -2,23 +2,13 @@
 #include "perl.h"
 #include "XSUB.h"
 
-#define sv_is_glob(sv) (SvTYPE(sv) == SVt_PVGV)
-#define sv_is_regexp(sv) (SvTYPE(sv) == SVt_REGEXP)
-#define sv_is_string(sv) \
-	(!sv_is_glob(sv) && !sv_is_regexp(sv) && \
-	 (SvFLAGS(sv) & (SVf_IOK|SVf_NOK|SVf_POK|SVp_IOK|SVp_NOK|SVp_POK)))
-
 static SV *hintkey_method_sv;
 static int (*next_keyword_plugin)(pTHX_ char *, STRLEN, OP **);
-
-/* low-level parser helpers */
 
 #define PL_bufptr (PL_parser->bufptr)
 #define PL_bufend (PL_parser->bufend)
 
-/* 
- * install stub (stolen from Mouse - xs-src/MouseUtil.xs 
- */
+/*  install sub (stolen from Mouse - xs-src/MouseUtil.xs  */
 
 void install_sub(pTHX_ GV* const gv, SV* const code_ref) {
     CV* cv;
@@ -64,35 +54,21 @@ void install_sub(pTHX_ GV* const gv, SV* const code_ref) {
     }
 }
 
-/*  parse var 
-#define parse_var() THX_parse_var(aTHX)
-static OP *THX_parse_var(pTHX)
+GV *get_slot(SV *method_name, HV *stash)
 {
-	char *s = PL_bufptr;
-	char *start = s;
-	PADOFFSET varpos;
-	OP *padop;
-	if(*s != '$') croak("RPN syntax error");
-	while(1) {
-		char c = *++s;
-		if(!isALNUM(c)) break;
-	}
-	if(s-start < 2) croak("RPN syntax error");
-	lex_read_to(s);
-	{
-		*/
-/* because pad_findmy() doesn't really use length yet */
-	/*
-		SV *namesv = sv_2mortal(newSVpvn(start, s-start));
-		varpos = pad_findmy(SvPVX(namesv), s-start, 0);
-	}
-	if(varpos == NOT_IN_PAD || PAD_COMPNAME_FLAGS_isOUR(varpos))
-		croak("RPN only supports \"my\" variables");
-	padop = newOP(OP_PADSV, 0);
-	padop->op_targ = varpos;
-	return padop;
+	SV *package_name = newSVpvn_share(HvNAME_get(stash), HvNAMELEN_get(stash), 0U);
+	GV *slot;
+
+	slot = gv_fetchpv(
+		form("%"SVf"::%"SVf, package_name, method_name), 
+		GV_ADDMULTI, SVt_PVCV
+	);
+	
+	if(!slot)
+		croak("couldn't get slot");
+
+	return slot;
 }
-*/
 
 /* Parse method name */
 #define parse_method_name() THX_parse_method_name(aTHX)
@@ -121,21 +97,6 @@ SV *THX_parse_method_name(pTHX)
 	return sv_2mortal(newSVpvn(start, s-start));
 }
 
-GV *get_slot(SV *method_name, HV *stash)
-{
-	SV *package_name = newSVpvn_share(HvNAME_get(stash), HvNAMELEN_get(stash), 0U);
-	GV *slot;
-
-	slot = gv_fetchpv(
-		form("%"SVf"::%"SVf, package_name, method_name), 
-		GV_ADDMULTI, SVt_PVCV
-	);
-	
-	if(!slot)
-		croak("couldn't get slot");
-
-	return slot;
-}
 
 SV *parse_signature(pTHX)
 {
@@ -175,9 +136,8 @@ SV *parse_signature(pTHX)
 #define parse_keyword_method() THX_parse_keyword_method(aTHX)
 static OP *THX_parse_keyword_method(pTHX)
 {
-    OP *stmts, *block, *final;
-	SV *code, *method_name, *package_name, *inject;
-	HV *stash;
+    OP *block;
+	SV *code, *method_name, *inject;
 	GV *slot;
  	I32 scope;
 
@@ -204,11 +164,7 @@ static OP *THX_parse_keyword_method(pTHX)
 	scope = Perl_block_start(TRUE);
 	start_subparse(FALSE, 0);	
 
-    stmts = ck_entersub_args_list(
-            op_scope( parse_block(0) )
-    );
-
-	block = Perl_block_end(scope, stmts);
+	block = Perl_block_end(scope, parse_block(0));
 	slot = get_slot(method_name, PL_curstash);
 	
 	code = (SV *)newATTRSUB(scope, 
