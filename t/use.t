@@ -4,6 +4,9 @@ require_ok "Method::Signatures::XS";
 
 package Foo {
     use Test::More;
+    use strict;
+    use warnings;
+    use Data::Dumper;
     use Method::Signatures::XS;
 
     method new_method { 
@@ -17,17 +20,25 @@ package Foo {
     }
 
     method new {
+        print $self;
         return bless {}, __PACKAGE__ ;
     }
 
-    ok 1, "parsing sig";
-
-    method with_args ($a, $b) {
-        return $a * $b;
+    method with_sig ($arg, $bee) {
+        print "inside with_sig\n";
+        #my $self = shift;
+        warn Dumper $self, $arg;
+        #   return $arg + $bee;
+    }
+=cut
+    method with_sig_some_space($a, $b) {
+        return $a + $b;
     }
 
-
-    ok 1, "finished parsing sig";
+    method with_sig_no_space($a, $b){
+        return $a + $b;
+    }
+=cut
 }
 
 
@@ -43,3 +54,5 @@ isa_ok($foo, 'Foo', 'constructor works');
 
 ok($foo->sub_method(), "class method 'sub_method' works");
 ok($foo->new_method(), "class method 'new_method' returns");
+
+is($foo->with_sig(1,1,1), 2, "method call with sig");

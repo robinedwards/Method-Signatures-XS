@@ -104,10 +104,9 @@ SV *THX_parse_method_name(pTHX)
 	char *start = s;
     SV *name;
 
-    
 	while(1) {
         char c = *++s;        
-        if (isSPACE(c)) {
+        if (isSPACE(c) || c == '(') {
             break;
         }
         else if(!(isALNUM(c) || c == '_')) {
@@ -159,16 +158,17 @@ SV *parse_signature(pTHX)
 
 		start++; /* skip opening brace */
 		
-		SV *to_inject = newSVpv("{ my ($self, ", 0);
+		SV *to_inject = newSVpv("{my ($self, ", 0U);
 		sv_catsv(to_inject, newSVpvn(start, end-start));
-		sv_catpv(to_inject, " = @_;");
+		sv_catpv(to_inject, ") = @_;\n");
+		
 
 		/* chop out sig */
-		lex_unstuff(end);
+		lex_unstuff(++end);
 
 		return to_inject;
 	} else {
-		return newSVpv("{ my ($self) = @_;", 0);
+		return newSVpv("{ my ($self) = @_;", 0U);
 	}
 }
 
@@ -183,6 +183,20 @@ static OP *THX_parse_keyword_method(pTHX)
 
     method_name = parse_method_name();
 
+
+	/* inject stack/sig stuff */
+	inject = parse_signature();
+	lex_read_space(0);
+	char *pos = PL_bufptr;
+	lex_unstuff(++pos); /* discard '{' */
+    lex_read_to(pos);
+	lex_stuff_sv(inject, 0U);
+
+
+    /*printf("%s about to parse: '%s'\n",
+        form("%"SVf, method_name), form("%"SVf, newSVpvn(pos, 30)));
+*/
+
 	start_subparse(FALSE, 0);
 	SAVEFREESV(PL_compcv);
 	SvREFCNT_inc_simple_void(PL_compcv);
@@ -190,16 +204,8 @@ static OP *THX_parse_keyword_method(pTHX)
 	scope = Perl_block_start(TRUE);
 	start_subparse(FALSE, 0);	
 
-	/* inject stack/sig stuff */
-	inject = parse_signature();
-	lex_read_space(0);
-	char *pos = PL_bufptr;
-	lex_unstuff(++pos); /* discard '{' */
-	lex_stuff_sv(inject, 0U);
-
     stmts = parse_block(0);
 	block = Perl_block_end(scope, stmts);
-
 	slot = get_slot(method_name, PL_curstash);
 	
 	code = (SV *)newATTRSUB(scope, 
