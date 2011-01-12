@@ -160,7 +160,7 @@ SV *parse_signature(pTHX)
 		
 		SV *to_inject = newSVpv("{my ($self, ", 0U);
 		sv_catsv(to_inject, newSVpvn(start, end-start));
-		sv_catpv(to_inject, ") = @_;\n");
+		sv_catpv(to_inject, ") = @_; die 'died parsed sig';\n");
 		
 
 		/* chop out sig */
@@ -168,7 +168,7 @@ SV *parse_signature(pTHX)
 
 		return to_inject;
 	} else {
-		return newSVpv("{ my ($self) = @_;", 0U);
+		return newSVpv("{ my ($self) = @_; print \"parsed sig!\\n\";", 0U);
 	}
 }
 
@@ -204,13 +204,15 @@ static OP *THX_parse_keyword_method(pTHX)
 	scope = Perl_block_start(TRUE);
 	start_subparse(FALSE, 0);	
 
-    stmts = parse_block(0);
+    stmts = ck_entersub_args_list(
+            op_scope( parse_block(0) )
+    );
+
 	block = Perl_block_end(scope, stmts);
 	slot = get_slot(method_name, PL_curstash);
 	
 	code = (SV *)newATTRSUB(scope, 
 		newSVOP(OP_CONST, 0, method_name), NULL, NULL, block);
-
 
 	install_sub(aTHX_ slot, newRV_inc(code));
 

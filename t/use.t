@@ -20,15 +20,11 @@ package Foo {
     }
 
     method new {
-        print $self;
         return bless {}, __PACKAGE__ ;
     }
 
     method with_sig ($arg, $bee) {
         print "inside with_sig\n";
-        #my $self = shift;
-        warn Dumper $self, $arg;
-        #   return $arg + $bee;
     }
 =cut
     method with_sig_some_space($a, $b) {
