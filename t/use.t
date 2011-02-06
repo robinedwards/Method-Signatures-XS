@@ -23,8 +23,8 @@ package Foo {
         return bless {}, __PACKAGE__ ;
     }
 
-    method with_sig ($arg, $bee) {
-        print "inside with_sig\n";
+    method with_sig ($a, $b, $c) {
+        return $a + $b + $c;
     }
 =cut
     method with_sig_some_space($a, $b) {
@@ -51,4 +51,4 @@ isa_ok($foo, 'Foo', 'constructor works');
 ok($foo->sub_method(), "class method 'sub_method' works");
 ok($foo->new_method(), "class method 'new_method' returns");
 
-is($foo->with_sig(1,1,1), 2, "method call with sig");
+is($foo->with_sig(1,1,1), 3, "method call with sig");

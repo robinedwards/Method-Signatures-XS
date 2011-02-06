@@ -8,68 +8,6 @@ static int (*next_keyword_plugin)(pTHX_ char *, STRLEN, OP **);
 #define PL_bufptr (PL_parser->bufptr)
 #define PL_bufend (PL_parser->bufend)
 
-/*  install sub (stolen from Mouse - xs-src/MouseUtil.xs  */
-
-void install_sub(pTHX_ GV* const gv, SV* const code_ref) {
-    CV* cv;
-
-    assert(gv != NULL);
-    assert(code_ref != NULL);
-    assert(isGV(gv));
-    assert(IsCodeRef(code_ref));
-
-    if(GvCVu(gv)){ /* delete *slot{gv} to work around "redefine" warning */
-        SvREFCNT_dec(GvCV(gv));
-        GvCV(gv) = NULL;
-    }
-
-
-    sv_setsv_mg((SV*)gv, code_ref); /* *gv = $code_ref */
-
-    /* name the CODE ref if it's anonymous */
-    cv = (CV*)SvRV(code_ref);
-    if(CvANON(cv)
-        && CvGV(cv) /* a cv under construction has no gv */ ){
-        HV* dbsub;
-
-        /* update %DB::sub to make NYTProf happy */
-        if((PL_perldb & (PERLDBf_SUBLINE|PERLDB_NAMEANON))
-            && PL_DBsub && (dbsub = GvHV(PL_DBsub))
-        ){
-            /* see Perl_newATTRSUB() in op.c */
-            SV* const subname = sv_newmortal();
-            HE* orig;
-
-            gv_efullname3(subname, CvGV(cv), NULL);
-            orig = hv_fetch_ent(dbsub, subname, FALSE, 0U);
-            if(orig){
-                gv_efullname3(subname, gv, NULL);
-                (void)hv_store_ent(dbsub, subname, HeVAL(orig), 0U);
-                SvREFCNT_inc_simple_void_NN(HeVAL(orig));
-            }
-        }
-
-        CvGV_set(cv, gv);
-        CvANON_off(cv);
-    }
-}
-
-GV *get_slot(SV *method_name, HV *stash)
-{
-	SV *package_name = newSVpvn_share(HvNAME_get(stash), HvNAMELEN_get(stash), 0U);
-	GV *slot;
-
-	slot = gv_fetchpv(
-		form("%"SVf"::%"SVf, package_name, method_name), 
-		GV_ADDMULTI, SVt_PVCV
-	);
-	
-	if(!slot)
-		croak("couldn't get slot");
-
-	return slot;
-}
-
 /* Parse method name */
 #define parse_method_name() THX_parse_method_name(aTHX)
 SV *THX_parse_method_name(pTHX)
@@ -94,7 +32,7 @@ SV *THX_parse_method_name(pTHX)
 		croak("no method name");
     lex_read_to(s);
 	
-	return sv_2mortal(newSVpvn(start, s-start));
+	return newSVpvn(start, s-start);
 }
 
 
@@ -119,7 +57,7 @@ SV *parse_signature(pTHX)
 
 		start++; /* skip opening brace */
 		
-		SV *to_inject = newSVpv("{my ($self, ", 0U);
+		SV *to_inject = newSVpv(" {my ($self, ", 0U);
 		sv_catsv(to_inject, newSVpvn(start, end-start));
 		sv_catpv(to_inject, ") = @_;\n");
 		
@@ -129,7 +67,7 @@ SV *parse_signature(pTHX)
 
 		return to_inject;
 	} else {
-		return newSVpv("{ my ($self) = @_;", 0U);
+		return newSVpv(" { my ($self) = @_;", 0U);
 	}
 }
 
@@ -137,47 +75,30 @@ SV *parse_signature(pTHX)
 static OP *THX_parse_keyword_method(pTHX)
 {
     OP *block;
-	SV *code, *method_name, *inject;
+	SV *code, *method_name, *sig, *inject;
 	GV *slot;
  	I32 scope;
 
     method_name = parse_method_name();
 
-
 	/* inject stack/sig stuff */
-	inject = parse_signature();
+	sig = parse_signature();
+	inject = newSVpv("; sub ", 0U);
+	sv_catsv(inject, method_name);
+	sv_catsv(inject, sig);
+
 	lex_read_space(0);
 	char *pos = PL_bufptr;
 	lex_unstuff(++pos); /* discard '{' */
     lex_read_to(pos);
+
 	lex_stuff_sv(inject, 0U);
-
-
-    /*printf("%s about to parse: '%s'\n",
-        form("%"SVf, method_name), form("%"SVf, newSVpvn(pos, 30)));
-*/
-
-	start_subparse(FALSE, 0);
-	SAVEFREESV(PL_compcv);
-	SvREFCNT_inc_simple_void(PL_compcv);
-
-	scope = Perl_block_start(TRUE);
-	start_subparse(FALSE, 0);	
-
-	block = Perl_block_end(scope, parse_block(0));
-	slot = get_slot(method_name, PL_curstash);
 	
-	code = (SV *)newATTRSUB(scope, 
-		newSVOP(OP_CONST, 0, method_name), NULL, NULL, block);
-
-	install_sub(aTHX_ slot, newRV_inc(code));
-
-	return newOP(OP_NULL, 0);
+ 	return newOP(OP_NULL, 0);
 }
 
 
 /* plugin glue */
-
 static int THX_keyword_active(pTHX_ SV *hintkey_sv)
 {
 	HE *he;
@@ -186,8 +107,8 @@ static int THX_keyword_active(pTHX_ SV *hintkey_sv)
 				SvSHARED_HASH(hintkey_sv));
 	return he && SvTRUE(HeVAL(he));
 }
-#define keyword_active(hintkey_sv) THX_keyword_active(aTHX_ hintkey_sv)
 
+#define keyword_active(hintkey_sv) THX_keyword_active(aTHX_ hintkey_sv)
 static void THX_keyword_enable(pTHX_ SV *hintkey_sv)
 {
 	SV *val_sv = newSViv(1);
@@ -203,8 +124,8 @@ static void THX_keyword_enable(pTHX_ SV *hintkey_sv)
 		SvREFCNT_dec(val_sv);
 	}
 }
-#define keyword_enable(hintkey_sv) THX_keyword_enable(aTHX_ hintkey_sv)
 
+#define keyword_enable(hintkey_sv) THX_keyword_enable(aTHX_ hintkey_sv)
 static void THX_keyword_disable(pTHX_ SV *hintkey_sv)
 {
 	if(GvHV(PL_hintgv)) {
@@ -213,8 +134,8 @@ static void THX_keyword_disable(pTHX_ SV *hintkey_sv)
 			hintkey_sv, G_DISCARD, SvSHARED_HASH(hintkey_sv));
 	}
 }
-#define keyword_disable(hintkey_sv) THX_keyword_disable(aTHX_ hintkey_sv)
 
+#define keyword_disable(hintkey_sv) THX_keyword_disable(aTHX_ hintkey_sv)
 static int my_keyword_plugin(pTHX_
 	char *keyword_ptr, STRLEN keyword_len, OP **op_ptr)
 {
