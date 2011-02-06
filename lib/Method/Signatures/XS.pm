@@ -1,4 +1,4 @@
-ackage Method::Signatures::XS;
+package Method::Signatures::XS;
 use 5.012;
 use strict;
 use warnings;

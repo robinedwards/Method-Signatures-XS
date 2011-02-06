@@ -1,8 +1,10 @@
-use 5.013;
+use 5.012;
+use strict;
+use warnings;
 use Test::More 'no_plan';
 require_ok "Method::Signatures::XS";
 
-package Foo {
+package Foo; {
     use Test::More;
     use strict;
     use warnings;
@@ -26,15 +28,6 @@ package Foo {
     method with_sig ($a, $b, $c) {
         return $a + $b + $c;
     }
-=cut
-    method with_sig_some_space($a, $b) {
-        return $a + $b;
-    }
-
-    method with_sig_no_space($a, $b){
-        return $a + $b;
-    }
-=cut
 }
 
 
