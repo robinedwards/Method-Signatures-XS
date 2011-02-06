@@ -1,5 +1,9 @@
-An attempt at method signatures in XS.
+Method signatures using the new keyword API.
 
-- can parse a sub using method keyword
-- need to install sub
-- stole lots of code from Zefram RPN XS API example.
+- Currently only simple lexer stuffing is working.
+
+- See other branches for some insane attempts at using parse_block.
+
+- Yes my XS is terrible.. I am still learning.
+
+- Patches welcome!
