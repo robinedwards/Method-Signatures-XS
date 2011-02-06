@@ -20,7 +20,7 @@ SV *THX_parse_method_name(pTHX)
 
 	while(1) {
         char c = *++s;        
-        if (isSPACE(c) || c == '(') {
+        if (isSPACE(c) || c == '(' || c == '{') {
             break;
         }
         else if(!(isALNUM(c) || c == '_')) {
